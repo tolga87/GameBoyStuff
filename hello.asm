@@ -69,14 +69,10 @@ init:
 ;	ld	bc, TitleEnd - Title
 ;	call	mem_CopyVRAM
 
-	ld	a, %00000000
-	ld	b, %11111111
+	ld	a, 178
+	ld	b, 36
 
-
-
-	;call	OneLeftShiftN
-	ld	c, 2
-	call	CopyBit
+	call	UnsignedDivide		; a = 178 / 36
 
 	add	a, $30
 
@@ -93,23 +89,99 @@ wait:
 	nop
 	jr wait
 
-; ~TA
-
-Divide:
-	; inputs: a, b | b!= 0
+; ****************************************************************************************
+; Integer division (unsigned) with remainder
+; https://en.wikipedia.org/wiki/Division_algorithm
+;
+UnsignedDivide:
+	; inputs: a, b | a >=0, b > 0
 	; output: a
 
-;Np	SET $C000
-;Dp	SET $C001
-;Qp	SET $C002
-;Rp	SET $C003
-;Nip	SET $C004
-;	ld [Np], a
-;	ld [Dp], b
+	di
+	push	bc
+	push	af
+	push	de
+	push	hl
 
+	ld	d, a		; d' = N
+	ld	e, b		; e' = D
+	ld	h, 7		; h' = 7
 
+				; N = d
+				; D = e
+				; Q = b
+				; R = c
+				; i = h
+	ld	b, 0
+	ld	c, 0
+.loop
+	ld	a, c		; a' = R
+	sla	a		; a' = R << 1
+	ld	c, a		; R  = R << 1
 
+	push	bc
+	ld	a, d
+	ld	b, h
+	call IsSet		; a'' = (N[h'] == 1)
+	pop	bc
 
+	cp	a, 0
+	jr	z, .zero
+	jr	.one
+
+.zero
+	res	0, c
+	jr	.afterBit0
+.one
+	set	0, c
+	jr	.afterBit0
+
+.afterBit0
+	push	bc
+	ld	a, c
+	ld	b, e
+	call	GTE
+	cp	a, 1
+	jr	z, .isGTE
+	jr	.isNotGTE
+
+.isGTE
+	pop	bc
+
+	ld	a, c		; c = c - e
+	sub	a, e
+	ld	c, a		; R = R - D
+
+	push	bc
+	ld	a, b
+	ld	b, h
+	call	SetBit		; b(h) = 1
+	pop	bc
+	ld	b, a
+	jr	.afterCheckGTE
+
+.isNotGTE
+	pop	bc
+	jr	.afterCheckGTE
+
+.afterCheckGTE
+	ld	a, h
+	cp	a, 0
+	jr	z, .afterLoop
+
+	sub	a, 1		; h--
+	ld	h, a
+	jr	.loop
+
+.afterLoop
+	pop	hl
+	pop	de		; stack is now: [bc - af
+	pop	af		; stack is now: [bc
+
+	ld	a, b		; Result is stored in a
+	pop	bc		; stack is empty
+
+	reti
 
 ; ****************************************************************************************
 OneLeftShiftN:
@@ -174,6 +246,46 @@ IsSet:
 .one
 	pop bc
 	ld	a, 1
+	reti
+
+; ****************************************************************************************
+SetBit:
+	; inputs: a, b
+	; output: a
+
+	di
+	push	bc
+	push	af
+
+	ld	c, b		; c' = b
+	ld	b, $FF		; b' = 11111111
+	call	CopyBit		; a' = aaaaa1aa
+	ld	c, a		; c' = aaaaa1aa
+
+	pop	af
+	ld	a, c		; a  = aaaaa1aa
+
+	pop	bc
+	reti
+
+; ****************************************************************************************
+ResetBit:
+	; inputs: a, b
+	; output: a
+
+	di
+	push	bc
+	push	af
+
+	ld	c, b		; c' = b
+	ld	b, $0		; b' = 00000000
+	call	CopyBit		; a' = aaaaa0aa
+	ld	c, a		; c' = aaaaa0aa
+
+	pop	af
+	ld	a, c		; a  = aaaaa0aa
+
+	pop	bc
 	reti
 
 ; ****************************************************************************************
@@ -245,10 +357,10 @@ GTE:
 	jr	c, .isLess
 	jp	.isGTE
 .isGTE
-	ld	a, $31
+	ld	a, 1
 	reti
 .isLess
-	ld	a, $30
+	ld	a, 0
 	reti
 
 
