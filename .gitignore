@@ -1,0 +1,6 @@
+.DS_Store
+run.sh
+*.o
+*.gb
+*.sav
+
